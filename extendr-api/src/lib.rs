@@ -366,6 +366,7 @@ pub mod wrapper;
 
 pub mod na;
 
+pub mod optional;
 #[cfg(feature = "ndarray")]
 pub mod robj_ndarray;
 
