@@ -7,12 +7,13 @@
 //! This library aims to provide an interface that will be familiar to
 //! first-time users of Rust or indeed any compiled language.
 //!
-//! See [Robj] for much of the content of this crate.
-//! [Robj] provides a safe wrapper for the R object type.
+//! See [`Robj`] for much of the content of this crate.
+//! [`Robj`] provides a safe wrapper for the R object type.
 //!
 //! ## Examples
 //!
 //! Use attributes and macros to export to R.
+//!
 //! ```ignore
 //! use extendr_api::prelude::*;
 //! // Export a function or impl to R.
@@ -367,8 +368,6 @@ pub mod wrapper;
 pub mod na;
 
 pub mod optional;
-#[cfg(feature = "ndarray")]
-pub mod robj_ndarray;
 
 pub use std::convert::{TryFrom, TryInto};
 pub use std::ops::Deref;
@@ -393,9 +392,6 @@ pub use thread_safety::{
     catch_r_error, handle_panic, single_threaded, this_thread_id, throw_r_error,
 };
 pub use wrapper::*;
-
-#[cfg(feature = "ndarray")]
-pub use robj_ndarray::*;
 
 pub use extendr_macros::*;
 

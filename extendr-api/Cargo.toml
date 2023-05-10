@@ -37,6 +37,11 @@ result_panic =[]
 result_list = []
 result_condition = []
 
+# This dummy feature enables all features that increase the functionality of 
+# extendr, via conversions or R features. Features that change behaviour
+# but do not add functionality (such as `libR-sys/use-bindgen`) are excluded
+full-functionality = ["graphics", "either", "ndarray", "num-complex", "serde"]
+
 # libc is needed to allocate a DevDesc (c.f., https://bugs.r-project.org/show_bug.cgi?id=18292)
 graphics = ["libc"]
 
@@ -53,5 +58,4 @@ tests-graphics = ["tests-minimal", "graphics"]
 tests-all = ["tests", "graphics"]
 
 [package.metadata.docs.rs]
-features = ["graphics", "either", "ndarray", "num-complex", "serde", "libR-sys/use-bindgen"]
-
+features = ["full-functionality", "libR-sys/use-bindgen"]
