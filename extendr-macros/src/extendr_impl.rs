@@ -36,7 +36,7 @@ use crate::wrappers;
 ///     fn aux_func;
 /// }
 /// ```
-pub fn extendr_impl(mut item_impl: ItemImpl) -> TokenStream {
+pub fn extendr_impl(args: Vec<syn::NestedMeta>, mut item_impl: ItemImpl) -> TokenStream {
     // Only `impl name { }` allowed
     if item_impl.defaultness.is_some() {
         return quote! { compile_error!("default not allowed in #[extendr] impl"); }.into();
@@ -62,13 +62,33 @@ pub fn extendr_impl(mut item_impl: ItemImpl) -> TokenStream {
         return quote! { compile_error!("where clause not allowed in #[extendr] impl"); }.into();
     }
 
-    let opts = wrappers::ExtendrOptions::default();
+    let mut opts = wrappers::ExtendrOptions::default();
+    for arg in &args {
+        crate::extendr_function::parse_options(&mut opts, arg);
+    }
+
     let self_ty = item_impl.self_ty.as_ref();
-    let self_ty_name = wrappers::type_name(self_ty);
+    let self_ty_name = opts
+        .r_class_name
+        .clone()
+        .unwrap_or_else(|| wrappers::type_name(self_ty));
+    let r_super_class_name = opts
+        .r_super_class_name
+        .clone()
+        .unwrap_or_else(|| "no_super_class".into());
     let prefix = format!("{}__", self_ty_name);
     let mut method_meta_names = Vec::new();
     let doc_string = wrappers::get_doc_string(&item_impl.attrs);
 
+    dbg!(
+        "{:?}{:?}{:?}{:?}{:?}{:?}",
+        &opts,
+        &self_ty,
+        &self_ty_name,
+        &prefix,
+        &method_meta_names,
+        &doc_string
+    );
     // Generate wrappers for methods.
     // eg.
     // ```
@@ -105,6 +125,8 @@ pub fn extendr_impl(mut item_impl: ItemImpl) -> TokenStream {
 
     let finalizer_name = format_ident!("__finalize__{}", self_ty_name);
 
+    dbg!(&meta_name, &finalizer_name);
+
     let expanded = TokenStream::from(quote! {
         // The impl itself copied from the source.
         #item_impl
@@ -139,10 +161,11 @@ pub fn extendr_impl(mut item_impl: ItemImpl) -> TokenStream {
         // Output conversion function for this type.
         impl From<#self_ty> for Robj {
             fn from(value: #self_ty) -> Self {
+
                 unsafe {
                     let ptr = Box::into_raw(Box::new(value));
                     let res = Robj::make_external_ptr(ptr, Robj::from(()));
-                    res.set_attrib(class_symbol(), #self_ty_name).unwrap();
+                    res.set_attrib(class_symbol(), vec!(#self_ty_name, #r_super_class_name)).unwrap();
                     res.register_c_finalizer(Some(#finalizer_name));
                     res
                 }
