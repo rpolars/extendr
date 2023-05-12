@@ -26,7 +26,7 @@ pub fn parse_options(opts: &mut wrappers::ExtendrOptions, arg: &syn::NestedMeta)
     use syn::{Lit, LitBool, Meta, MetaNameValue, NestedMeta};
 
     fn help_message() -> ! {
-        panic!("expected #[extendr(use_try_from=bool, r_name=\"name\")]");
+        panic!("expected #[extendr(use_try_from=bool, r_name=\"name\", r_class_name=\"AnyChosenName\")]");
     }
 
     match arg {
@@ -50,6 +50,12 @@ pub fn parse_options(opts: &mut wrappers::ExtendrOptions, arg: &syn::NestedMeta)
             } else if path.is_ident("mod_name") {
                 if let Lit::Str(litstr) = lit {
                     opts.mod_name = Some(litstr.value());
+                } else {
+                    help_message();
+                }
+            } else if path.is_ident("r_class_name") {
+                if let Lit::Str(litstr) = lit {
+                    opts.r_class_name = Some(litstr.value());
                 } else {
                     help_message();
                 }
