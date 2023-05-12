@@ -26,7 +26,7 @@ pub fn parse_options(opts: &mut wrappers::ExtendrOptions, arg: &syn::NestedMeta)
     use syn::{Lit, LitBool, Meta, MetaNameValue, NestedMeta};
 
     fn help_message() -> ! {
-        panic!("expected #[extendr(use_try_from=bool, r_name=\"name\", r_class_name=\"AnyChosenName\")]");
+        panic!("expected #[extendr(use_try_from=bool, r_name=\"name\", r_class_name=\"AnyChosenName\", r_super_class_name=\"AnySuperName\")]");
     }
 
     match arg {
@@ -35,6 +35,7 @@ pub fn parse_options(opts: &mut wrappers::ExtendrOptions, arg: &syn::NestedMeta)
             eq_token: _,
             lit,
         })) => {
+            //TODO refactor with match guards
             if path.is_ident("use_try_from") {
                 if let Lit::Bool(LitBool { value, .. }) = lit {
                     opts.use_try_from = *value;
@@ -56,6 +57,12 @@ pub fn parse_options(opts: &mut wrappers::ExtendrOptions, arg: &syn::NestedMeta)
             } else if path.is_ident("r_class_name") {
                 if let Lit::Str(litstr) = lit {
                     opts.r_class_name = Some(litstr.value());
+                } else {
+                    help_message();
+                }
+            } else if path.is_ident("r_super_class_name") {
+                if let Lit::Str(litstr) = lit {
+                    opts.r_super_class_name = Some(litstr.value());
                 } else {
                     help_message();
                 }

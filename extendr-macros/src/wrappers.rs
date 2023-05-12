@@ -10,6 +10,7 @@ pub struct ExtendrOptions {
     pub use_try_from: bool,
     pub r_name: Option<String>,
     pub r_class_name: Option<String>,
+    pub r_super_class_name: Option<String>,
     pub mod_name: Option<String>,
 }
 

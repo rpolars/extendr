@@ -72,6 +72,10 @@ pub fn extendr_impl(args: Vec<syn::NestedMeta>, mut item_impl: ItemImpl) -> Toke
         .r_class_name
         .clone()
         .unwrap_or_else(|| wrappers::type_name(self_ty));
+    let r_super_class_name = opts
+        .r_super_class_name
+        .clone()
+        .unwrap_or_else(|| "no_super_class".into());
     let prefix = format!("{}__", self_ty_name);
     let mut method_meta_names = Vec::new();
     let doc_string = wrappers::get_doc_string(&item_impl.attrs);
@@ -157,10 +161,11 @@ pub fn extendr_impl(args: Vec<syn::NestedMeta>, mut item_impl: ItemImpl) -> Toke
         // Output conversion function for this type.
         impl From<#self_ty> for Robj {
             fn from(value: #self_ty) -> Self {
+
                 unsafe {
                     let ptr = Box::into_raw(Box::new(value));
                     let res = Robj::make_external_ptr(ptr, Robj::from(()));
-                    res.set_attrib(class_symbol(), #self_ty_name).unwrap();
+                    res.set_attrib(class_symbol(), vec!(#self_ty_name, #r_super_class_name)).unwrap();
                     res.register_c_finalizer(Some(#finalizer_name));
                     res
                 }
