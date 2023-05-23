@@ -112,46 +112,95 @@ pub fn make_function_wrappers(
     // }
     // ```
     //
-
-    wrappers.push(parse_quote!(
-        #[no_mangle]
-        #[allow(non_snake_case, clippy::not_unsafe_ptr_arg_deref)]
-        pub extern "C" fn #wrap_name(#formal_args) -> extendr_api::SEXP {
-            use extendr_api::robj::*;
-            let res_res: std::result::Result<
-                std::result::Result<Robj, extendr_api::Error>,
-                Box<dyn std::any::Any + Send>
-                > = unsafe {
-                #( #convert_args )*
-                std::panic::catch_unwind(||-> std::result::Result<Robj, extendr_api::Error> {
-                    Ok(extendr_api::Robj::from(#call_name(#actual_args)))
-                })
-            };
-            match res_res {
-                Ok(Ok(zz)) => {
-                    return unsafe { zz.get() };
+    if opts.dep_inject.is_some() {
+        wrappers.push(parse_quote!(
+            #[no_mangle]
+            #[allow(non_snake_case, clippy::not_unsafe_ptr_arg_deref)]
+            pub extern "C" fn #wrap_name(#formal_args) -> extendr_api::SEXP {
+                use extendr_api::robj::*;
+                let res_res: std::result::Result<
+                    std::result::Result<Robj, Box<dyn std::error::Error>>,
+                    Box<dyn std::any::Any + Send>
+                    > = unsafe {
+                    #( #convert_args )*
+                    std::panic::catch_unwind(||-> std::result::Result<Robj, Box<dyn std::error::Error>> {
+                        let f_out_res = (|| -> std::result::Result<_, Box<dyn std::error::Error>> {
+                            Ok(#call_name(#actual_args))
+                        })();
+                        dbg!(&f_out_res);
+                        let uobj_res = f_out_res.map(#inject_ident::from);
+                        dbg!(&uobj_res);
+                        let robj_res = uobj_res.map(extendr_api::Robj::from);
+                        dbg!(&robj_res);
+                        Ok(robj_res?)
+                    })
+                };
+                match res_res {
+                    Ok(Ok(zz)) => {
+                        return unsafe { zz.get() };
+                    }
+                    Ok(Err(extendr_err)) => {
+                        let err_string = extendr_err.to_string();
+                        // try_from=true errors contain Robj, this must be dropped to not leak
+                        drop(extendr_err);
+                        extendr_api::throw_r_error(&err_string);
+                    }
+                    Err(unwind_err) => {
+                        drop(unwind_err); //did not notice any difference if dropped or not.
+                        // It should be possible to downcast the unwind_err Any type to the error
+                        // included in panic. The advantage would be the panic cause could be included
+                        // in the R terminal error message and not only via std-err.
+                        // but it should be handled in a separate function and not in-lined here.
+                        let err_string = format!("user function panicked: {}\0",#r_name_str);
+                        // cannot use throw_r_error here for some reason.
+                        // handle_panic() exports err string differently.
+                        extendr_api::handle_panic(err_string.as_str(), || panic!());
+                    }
                 }
-                Ok(Err(extendr_err)) => {
-                    let err_string = extendr_err.to_string();
-                    // try_from=true errors contain Robj, this must be dropped to not leak
-                    drop(extendr_err);
-                    extendr_api::throw_r_error(&err_string);
-                }
-                Err(unwind_err) => {
-                    drop(unwind_err); //did not notice any difference if dropped or not.
-                    // It should be possible to downcast the unwind_err Any type to the error
-                    // included in panic. The advantage would be the panic cause could be included
-                    // in the R terminal error message and not only via std-err.
-                    // but it should be handled in a separate function and not in-lined here.
-                    let err_string = format!("user function panicked: {}\0",#r_name_str);
-                    // cannot use throw_r_error here for some reason.
-                    // handle_panic() exports err string differently.
-                    extendr_api::handle_panic(err_string.as_str(), || panic!());
-                }
+                unreachable!("internal extendr error, this should never happen.")
             }
-            unreachable!("internal extendr error, this should never happen.")
-        }
-    ));
+        ));
+    } else {
+        wrappers.push(parse_quote!(
+            #[no_mangle]
+            #[allow(non_snake_case, clippy::not_unsafe_ptr_arg_deref)]
+            pub extern "C" fn #wrap_name(#formal_args) -> extendr_api::SEXP {
+                use extendr_api::robj::*;
+                let res_res: std::result::Result<
+                    std::result::Result<Robj, extendr_api::Error>,
+                    Box<dyn std::any::Any + Send>
+                    > = unsafe {
+                    #( #convert_args )*
+                    std::panic::catch_unwind(||-> std::result::Result<Robj, extendr_api::Error> {
+                        Ok(extendr_api::Robj::from(#inject_ident(#call_name(#actual_args))))
+                    })
+                };
+                match res_res {
+                    Ok(Ok(zz)) => {
+                        return unsafe { zz.get() };
+                    }
+                    Ok(Err(extendr_err)) => {
+                        let err_string = extendr_err.to_string();
+                        // try_from=true errors contain Robj, this must be dropped to not leak
+                        drop(extendr_err);
+                        extendr_api::throw_r_error(&err_string);
+                    }
+                    Err(unwind_err) => {
+                        drop(unwind_err); //did not notice any difference if dropped or not.
+                        // It should be possible to downcast the unwind_err Any type to the error
+                        // included in panic. The advantage would be the panic cause could be included
+                        // in the R terminal error message and not only via std-err.
+                        // but it should be handled in a separate function and not in-lined here.
+                        let err_string = format!("user function panicked: {}\0",#r_name_str);
+                        // cannot use throw_r_error here for some reason.
+                        // handle_panic() exports err string differently.
+                        extendr_api::handle_panic(err_string.as_str(), || panic!());
+                    }
+                }
+                unreachable!("internal extendr error, this should never happen.")
+            }
+        ));
+    }
 
     // Generate a function to push the metadata for a function.
     wrappers.push(parse_quote!(
