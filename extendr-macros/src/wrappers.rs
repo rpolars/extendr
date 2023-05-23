@@ -10,6 +10,7 @@ pub struct ExtendrOptions {
     pub use_try_from: bool,
     pub r_name: Option<String>,
     pub mod_name: Option<String>,
+    pub dep_inject: Option<String>,
 }
 
 // Generate wrappers for a specific function.
@@ -21,6 +22,8 @@ pub fn make_function_wrappers(
     sig: &mut syn::Signature,
     self_ty: Option<&syn::Type>,
 ) {
+    dbg!(&opts);
+
     let rust_name = sig.ident.clone();
 
     let r_name_str = if let Some(r_name) = opts.r_name.as_ref() {
@@ -44,10 +47,16 @@ pub fn make_function_wrappers(
     let doc_string = get_doc_string(attrs);
     let return_type_string = get_return_type(sig);
 
-    let panic_str = format!("{} panicked.\0", r_name_str);
-
     let inputs = &mut sig.inputs;
     let has_self = matches!(inputs.iter().next(), Some(FnArg::Receiver(_)));
+
+    let inject_ident = format_ident!(
+        "{}",
+        opts.dep_inject
+            .clone()
+            .unwrap_or("std::convert::identity".to_string())
+    );
+    //let inject_ident = quote! {#x};
 
     let call_name = if has_self {
         let is_mut = match inputs.iter().next() {
@@ -102,17 +111,45 @@ pub fn make_function_wrappers(
     //     }
     // }
     // ```
+    //
+
     wrappers.push(parse_quote!(
         #[no_mangle]
         #[allow(non_snake_case, clippy::not_unsafe_ptr_arg_deref)]
         pub extern "C" fn #wrap_name(#formal_args) -> extendr_api::SEXP {
-            unsafe {
-                use extendr_api::robj::*;
+            use extendr_api::robj::*;
+            let res_res: std::result::Result<
+                std::result::Result<Robj, extendr_api::Error>,
+                Box<dyn std::any::Any + Send>
+                > = unsafe {
                 #( #convert_args )*
-                extendr_api::handle_panic(#panic_str, ||
-                    extendr_api::Robj::from(#call_name(#actual_args)).get()
-                )
+                std::panic::catch_unwind(||-> std::result::Result<Robj, extendr_api::Error> {
+                    Ok(extendr_api::Robj::from(#call_name(#actual_args)))
+                })
+            };
+            match res_res {
+                Ok(Ok(zz)) => {
+                    return unsafe { zz.get() };
+                }
+                Ok(Err(extendr_err)) => {
+                    let err_string = extendr_err.to_string();
+                    // try_from=true errors contain Robj, this must be dropped to not leak
+                    drop(extendr_err);
+                    extendr_api::throw_r_error(&err_string);
+                }
+                Err(unwind_err) => {
+                    drop(unwind_err); //did not notice any difference if dropped or not.
+                    // It should be possible to downcast the unwind_err Any type to the error
+                    // included in panic. The advantage would be the panic cause could be included
+                    // in the R terminal error message and not only via std-err.
+                    // but it should be handled in a separate function and not in-lined here.
+                    let err_string = format!("user function panicked: {}\0",#r_name_str);
+                    // cannot use throw_r_error here for some reason.
+                    // handle_panic() exports err string differently.
+                    extendr_api::handle_panic(err_string.as_str(), || panic!());
+                }
             }
+            unreachable!("internal extendr error, this should never happen.")
         }
     ));
 
@@ -295,19 +332,29 @@ fn translate_to_robj(input: &FnArg) -> syn::Stmt {
 
 // Generate actual argument list for the call (ie. a list of conversions).
 fn translate_actual(opts: &ExtendrOptions, input: &FnArg) -> Option<Expr> {
-    match input {
+    let x = match input {
         FnArg::Typed(ref pattype) => {
             let pat = &pattype.pat.as_ref();
             let ty = &pattype.ty.as_ref();
             if let syn::Pat::Ident(ref ident) = pat {
                 let varname = format_ident!("_{}_robj", ident.ident);
-                if opts.use_try_from {
-                    Some(parse_quote! { extendr_api::unwrap_or_throw_error(
-                        #varname.try_into()
-                        .map_err(|e| extendr_api::Error::from(e)))
-                    })
+                let varsymbol = ident.ident.clone().to_string();
+                dbg!(&varname, &opts);
+                if let Some(inject_string) = opts.dep_inject.clone() {
+                    dbg!(&inject_string);
+                    let inject_ident = format_ident!("{}", inject_string);
+                    Some(
+                        parse_quote! {#inject_ident(#varname).try_into().map_err(|err| #inject_ident::blame(Box::new(err), #varsymbol))?},
+                    )
                 } else {
-                    Some(parse_quote! { extendr_api::unwrap_or_throw(<#ty>::from_robj(&#varname)) })
+                    if opts.use_try_from {
+                        Some(parse_quote! {
+                            #varname.try_into()
+                            .map_err(|e| extendr_api::Error::from(e))?
+                        })
+                    } else {
+                        Some(parse_quote! { <#ty>::from_robj(&#varname)? })
+                    }
                 }
             } else {
                 None
@@ -317,7 +364,9 @@ fn translate_actual(opts: &ExtendrOptions, input: &FnArg) -> Option<Expr> {
             // Do not use self explicitly as an actual arg.
             None
         }
-    }
+    };
+    //dbg!(&x);
+    x
 }
 
 // Get a single named literal from a list of attributes.

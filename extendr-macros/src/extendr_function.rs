@@ -23,7 +23,7 @@ pub fn extendr_function(args: Vec<syn::NestedMeta>, mut func: ItemFn) -> TokenSt
 
 /// Parse a set of attribute arguments for #[extendr(opts...)]
 pub fn parse_options(opts: &mut wrappers::ExtendrOptions, arg: &syn::NestedMeta) {
-    use syn::{Lit, LitBool, Meta, MetaNameValue, NestedMeta};
+    use syn::{ExprStruct, Lit, LitBool, Meta, MetaNameValue, NestedMeta};
 
     fn help_message() -> ! {
         panic!("expected #[extendr(use_try_from=bool, r_name=\"name\")]");
@@ -35,6 +35,7 @@ pub fn parse_options(opts: &mut wrappers::ExtendrOptions, arg: &syn::NestedMeta)
             eq_token: _,
             lit,
         })) => {
+            dbg!(&path);
             if path.is_ident("use_try_from") {
                 if let Lit::Bool(LitBool { value, .. }) = lit {
                     opts.use_try_from = *value;
@@ -50,6 +51,12 @@ pub fn parse_options(opts: &mut wrappers::ExtendrOptions, arg: &syn::NestedMeta)
             } else if path.is_ident("mod_name") {
                 if let Lit::Str(litstr) = lit {
                     opts.mod_name = Some(litstr.value());
+                } else {
+                    help_message();
+                }
+            } else if path.is_ident("dep_inject") {
+                if let Lit::Str(litstr) = lit {
+                    opts.dep_inject = Some(litstr.value());
                 } else {
                     help_message();
                 }
