@@ -143,16 +143,14 @@ pub fn make_function_wrappers(
                     std::panic::catch_unwind(||-> std::result::Result<Robj, Box<dyn std::error::Error>> {
                         let f_out_res = (|| -> std::result::Result<_, Box<dyn std::error::Error>> {
                             let x = #call_name(#actual_args);
-                            //dbg!(&x);
                             #bubble_user_result
                             Ok(x)
                         })();
                         
-                        //dbg!(&f_out_res);
-                        let uobj: #inject_ident = f_out_res.into();
-                        //dbg!(&uobj);
+        
+                        let uobj: #inject_ident = f_out_res.try_into()?;    
                         let robj = uobj.0;
-                        //dbg!(&robj);
+                    
                         Ok(robj)   
                     })
                 };
@@ -162,6 +160,7 @@ pub fn make_function_wrappers(
                     }
                     Ok(Err(extendr_err)) => {
                         let err_string = extendr_err.to_string();
+                        
                         // try_from=true errors contain Robj, this must be dropped to not leak
                         drop(extendr_err);
                         extendr_api::throw_r_error(&err_string);
