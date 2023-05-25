@@ -22,8 +22,6 @@ pub fn make_function_wrappers(
     sig: &mut syn::Signature,
     self_ty: Option<&syn::Type>,
 ) {
-    dbg!(&opts);
-
     let rust_name = sig.ident.clone();
 
     let r_name_str = if let Some(r_name) = opts.r_name.as_ref() {
@@ -112,6 +110,25 @@ pub fn make_function_wrappers(
     // }
     // ```
     //
+
+    let mut has_result_return_type = false;
+    println!("\nname of fn {}", rust_name_str);
+    if let syn::ReturnType::Type(_, ty) = sig.clone().output {
+        if let Type::Path(path) = *ty {
+            if let Some(segment) = path.path.segments.last() {
+                if segment.ident.to_string() == "Result" {
+                    println!("The return type is Result<T, E>");
+                    has_result_return_type = true;
+                }
+            }
+        }
+    }
+    let bubble_user_result = if has_result_return_type {
+        quote! {let x = x?;}
+    } else {
+        quote! {}
+    };
+
     if opts.dep_inject.is_some() {
         wrappers.push(parse_quote!(
             #[no_mangle]
@@ -125,14 +142,18 @@ pub fn make_function_wrappers(
                     #( #convert_args )*
                     std::panic::catch_unwind(||-> std::result::Result<Robj, Box<dyn std::error::Error>> {
                         let f_out_res = (|| -> std::result::Result<_, Box<dyn std::error::Error>> {
-                            Ok(#call_name(#actual_args))
+                            let x = #call_name(#actual_args);
+                            //dbg!(&x);
+                            #bubble_user_result
+                            Ok(x)
                         })();
-                        dbg!(&f_out_res);
-                        let uobj_res = f_out_res.map(#inject_ident::from);
-                        dbg!(&uobj_res);
-                        let robj_res = uobj_res.map(extendr_api::Robj::from);
-                        dbg!(&robj_res);
-                        Ok(robj_res?)
+                        
+                        //dbg!(&f_out_res);
+                        let uobj: #inject_ident = f_out_res.into();
+                        //dbg!(&uobj);
+                        let robj = uobj.0;
+                        //dbg!(&robj);
+                        Ok(robj)   
                     })
                 };
                 match res_res {
@@ -388,9 +409,9 @@ fn translate_actual(opts: &ExtendrOptions, input: &FnArg) -> Option<Expr> {
             if let syn::Pat::Ident(ref ident) = pat {
                 let varname = format_ident!("_{}_robj", ident.ident);
                 let varsymbol = ident.ident.clone().to_string();
-                dbg!(&varname, &opts);
+                //dbg!(&varname, &opts);
                 if let Some(inject_string) = opts.dep_inject.clone() {
-                    dbg!(&inject_string);
+                    //dbg!(&inject_string);
                     let inject_ident = format_ident!("{}", inject_string);
                     Some(
                         parse_quote! {#inject_ident(#varname).try_into().map_err(|err| #inject_ident::blame(Box::new(err), #varsymbol))?},
