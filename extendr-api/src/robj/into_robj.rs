@@ -1,5 +1,4 @@
 use super::*;
-use crate::scalar::Scalar;
 use crate::single_threaded;
 
 pub(crate) fn str_to_character(s: &str) -> SEXP {

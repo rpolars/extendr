@@ -1,4 +1,4 @@
-use super::scalar::{Rint, Scalar};
+use super::scalar::Rint;
 use super::*;
 use std::iter::FromIterator;
 

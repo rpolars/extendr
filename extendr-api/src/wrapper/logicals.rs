@@ -1,4 +1,4 @@
-use super::scalar::{Rbool, Scalar};
+use super::scalar::Rbool;
 use super::*;
 use std::iter::FromIterator;
 

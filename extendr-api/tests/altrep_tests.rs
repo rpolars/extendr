@@ -22,7 +22,7 @@ fn test_altinteger() {
                 if index == self.missing_index {
                     Rint::na()
                 } else {
-                    Rint::new(self.start + self.step * index as i32)
+                    Rint(self.start + self.step * index as i32)
                 }
             }
         }
@@ -76,7 +76,7 @@ fn test_altreal() {
                 if index == self.missing_index {
                     Rfloat::na()
                 } else {
-                    Rfloat::new(self.start + self.step * index as f64)
+                    Rfloat(self.start + self.step * index as f64)
                 }
             }
         }

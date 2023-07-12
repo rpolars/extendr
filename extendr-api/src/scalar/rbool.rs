@@ -1,5 +1,4 @@
 use crate::scalar::macros::*;
-use crate::scalar::Scalar;
 use crate::*;
 use std::convert::TryFrom;
 
@@ -10,20 +9,11 @@ use std::convert::TryFrom;
 /// The value `i32::MIN` is used as `NA`.
 ///
 /// `Rbool` has the same footprint as an `i32` value allowing us to use it in zero copy slices.
-#[repr(transparent)]
 pub struct Rbool(i32);
 
-impl Scalar<i32> for Rbool {
-    fn inner(&self) -> i32 {
-        self.0
-    }
-
-    fn new(val: i32) -> Self {
-        Rbool(val)
-    }
-}
-
 impl Rbool {
+    gen_impl!(Rbool, i32);
+
     /// Return a `true` `Rbool`.
     pub const fn true_value() -> Rbool {
         Rbool(1)
@@ -62,7 +52,6 @@ impl Rbool {
 
 gen_trait_impl!(Rbool, bool, |x: &Rbool| x.inner() == i32::MIN, i32::MIN);
 gen_from_primitive!(Rbool, i32);
-gen_partial_ord!(Rbool, bool);
 
 impl From<bool> for Rbool {
     fn from(v: bool) -> Self {
